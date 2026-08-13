@@ -25,7 +25,7 @@ def ask_question(query: Query):
             if chunk.type == "response.output_text.delta":
                 yield chunk.delta
 
-    return StreamingResponse(gen(), media_type="text/plain")
+    return StreamingResponse(gen(), media_type="application/json")
 
 if __name__ == "__main__":
     import uvicorn
