@@ -1,0 +1,70 @@
+from dotenv import load_dotenv
+load_dotenv()
+
+import subprocess
+import os
+from openai import OpenAI
+
+client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+
+def staged_diff() -> str:
+    """Get the staged diff of the current git repository."""
+    result = subprocess.run(
+        ["git", "diff", "--staged"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise Exception(f"Error getting staged diff: {result.stderr}")
+    return result.stdout
+
+def write_commit_message(diff: str) -> str:
+    """Generate a commit message based on the staged diff using OpenAI's API."""
+    prompt = f"Write a concise and descriptive git commit message for the following diff:\n\n{diff}"
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content":
+             "Write a concise conventional-commit message for this diff. "
+             "Format: type(scope): summary. One line, imperative mood."},
+            {"role": "user", "content": diff},
+        ]
+    )
+    return response.choices[0].message.content.strip()
+
+def commit_with_message(message):
+    """Commit the staged changes with the provided commit message."""
+    result = subprocess.run(
+        ["git", "commit", "-m", message],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise Exception(f"Error committing changes: {result.stderr}")
+    return result.stdout
+
+def push_changes():
+    """Push the committed changes to the remote repository."""
+    result = subprocess.run(
+        ["git", "push"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise Exception(f"Error pushing changes: {result.stderr}")
+    return result.stdout
+
+if __name__ == "__main__":
+    try:
+        diff = staged_diff()
+        if not diff:
+            print("No staged changes to commit.")
+            exit(0)
+        commit_message = write_commit_message(diff)
+        print(f"Generated commit message: {commit_message}")
+        commit_output = commit_with_message(commit_message)
+        print(commit_output)
+        push_output = push_changes()
+        print(push_output)
+    except Exception as e:
+        print(f"Error: {e}")
