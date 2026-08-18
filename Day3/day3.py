@@ -16,7 +16,8 @@ collection = chroma.get_or_create_collection("regulations")  # Ensure the collec
 
 SYSTEM_PROMPT = """You are a helpful assistant that provides information about regulations.
                 You will be given a question and some context. Use the context to answer the question accurately. 
-                If the context does not contain the answer, respond with "I don't know." Do not make up information. Be concise and clear in your response."""
+                If the context does not contain the answer, respond with "I don't know."
+                Do not make up information. Be concise and clear in your response."""
 
 class Query(BaseModel):
     query: str

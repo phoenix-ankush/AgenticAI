@@ -7,6 +7,50 @@ from openai import OpenAI
 
 client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
+tools = [
+    {
+        "type":"function", 
+        "name":"staged_diff",
+        "function": {
+            "name":"staged_diff",
+            "description":"Get the staged diff of the current git repository." ,
+            "parameters":{},
+            "returns":{"type":"string","description":"The staged diff as a string."}
+            }
+    
+    },
+    {
+        "type":"function",
+        "name":"write_commit_message",
+        "function": {
+            "name":"write_commit_message",
+            "description":"Generate a commit message based on the staged diff using OpenAI's API.",
+            "parameters":{"diff":{"type":"string","description":"The staged diff to generate a commit message for."}},
+            "returns":{"type":"string","description":"The generated commit message."}
+        }
+    },
+    {
+        "type":"function",
+        "name":"commit_with_message",
+        "function": {
+            "name":"commit_with_message",
+            "description":"Commit the staged changes with the provided commit message.",
+            "parameters":{"message":{"type":"string","description":"The commit message to use for the commit."}},
+            "returns":{"type":"string","description":"The output of the git commit command."}
+        }
+    },
+    {
+        "type":"function",
+        "name":"push_changes",
+        "function": {
+            "name":"push_changes",
+            "description":"Push the committed changes to the remote repository.",
+            "parameters":{},
+            "returns":{"type":"string","description":"The output of the git push command."}
+        }
+    }
+]
+
 def staged_diff() -> str:
     """Get the staged diff of the current git repository."""
     result = subprocess.run(
@@ -53,6 +97,36 @@ def push_changes():
     if result.returncode != 0:
         raise Exception(f"Error pushing changes: {result.stderr}")
     return result.stdout
+
+messages = [{"role": "user", "content": "Review my staged changes and commit them well."}]
+while True:
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=messages,
+        functions=tools,
+        function_call="auto"
+    )
+    message = response.choices[0].message
+    messages.append(message)
+    
+    if message.function_call:
+        function_name = message.function_call.name
+        arguments = message.function_call.arguments
+        
+        if function_name == "staged_diff":
+            result = staged_diff()
+        elif function_name == "write_commit_message":
+            result = write_commit_message(arguments.get("diff", ""))
+        elif function_name == "commit_with_message":
+            result = commit_with_message(arguments.get("message", ""))
+        elif function_name == "push_changes":
+            result = push_changes()
+        else:
+            raise ValueError(f"Unknown function: {function_name}")
+        
+        messages.append({"role": "function", "name": function_name, "content": result})
+    else:
+        break
 
 if __name__ == "__main__":
     try:
