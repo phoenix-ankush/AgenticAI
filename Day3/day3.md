@@ -34,10 +34,12 @@ Two endpoints: `POST /index_regulations` (one-time ingest) and `POST /query_regu
 BASE_DIR = Path(__file__).parent
 text = (BASE_DIR / "regulation.txt").read_text(encoding="utf-8")
 
+
 def retrieve(question, k=5):
     q_emb = embed_batch([question])[0]
     res = collection.query(query_embeddings=[q_emb], n_results=k)
     return res["documents"][0], res["metadatas"][0]
+
 
 # context goes in the USER message, joined to one string
 context_block = "\n\n".join(retrieved_chunks)

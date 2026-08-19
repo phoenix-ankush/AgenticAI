@@ -33,6 +33,7 @@ class EmailAnalysis(BaseModel):
     action_items: list[str]
     summary: str
 
+
 @app.post("/analyze_email")
 def analyze_email(query: Query) -> EmailAnalysis:
     completion = client.chat.completions.parse(
