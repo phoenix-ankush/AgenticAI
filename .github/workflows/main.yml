@@ -1,0 +1,20 @@
+name: Hello World
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+
+
+jobs:
+  build:
+    runs-on: macos-13
+
+    steps:
+      - uses: actions/checkout@v2
+
+      -name: run one liner script
+      run: echo hello world!
+      
