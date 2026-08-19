@@ -2,6 +2,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+import json
 import os
 import subprocess
 
@@ -12,63 +13,59 @@ client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 tools = [
     {
         "type": "function",
-        "name": "staged_diff",
         "function": {
             "name": "staged_diff",
             "description": "Get the staged diff of the current git repository.",
-            "parameters": {},
-            "returns": {
-                "type": "string",
-                "description": "The staged diff as a string.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
             },
         },
     },
     {
         "type": "function",
-        "name": "write_commit_message",
         "function": {
             "name": "write_commit_message",
             "description": "Generate a commit message based on the staged diff using OpenAI's API.",
             "parameters": {
-                "diff": {
-                    "type": "string",
-                    "description": "The staged diff to generate a commit message for.",
-                }
-            },
-            "returns": {
-                "type": "string",
-                "description": "The generated commit message.",
+                "type": "object",
+                "properties": {
+                    "diff": {
+                        "type": "string",
+                        "description": "The staged diff to generate a commit message for.",
+                    }
+                },
+                "required": ["diff"],
             },
         },
     },
     {
         "type": "function",
-        "name": "commit_with_message",
         "function": {
             "name": "commit_with_message",
             "description": "Commit the staged changes with the provided commit message.",
             "parameters": {
-                "message": {
-                    "type": "string",
-                    "description": "The commit message to use for the commit.",
-                }
-            },
-            "returns": {
-                "type": "string",
-                "description": "The output of the git commit command.",
+                "type": "object",
+                "properties": {
+                    "message": {
+                        "type": "string",
+                        "description": "The commit message to use for the commit.",
+                    }
+                },
+                "required": ["message"],
             },
         },
     },
     {
         "type": "function",
-        "name": "push_changes",
         "function": {
             "name": "push_changes",
             "description": "Push the committed changes to the remote repository.",
-            "parameters": {},
-            "returns": {
-                "type": "string",
-                "description": "The output of the git push command.",
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": [],
             },
         },
     },
@@ -128,46 +125,48 @@ def push_changes():
     return result.stdout
 
 
-messages = [
-    {"role": "user", "content": "Review my staged changes and commit them well."}
-]
-while True:
-    response = client.chat.completions.create(
-        model="gpt-4o-mini", messages=messages, functions=tools, function_call="auto"
-    )
-    message = response.choices[0].message
-    messages.append(message)
+def run_agent():
+    messages = [
+        {"role": "user", "content": "Review my staged changes and commit them well."}
+    ]
+    while True:
+        print("calling API...")
+        response = client.chat.completions.create(
+            model="gpt-4o-mini", messages=messages, tools=tools, tool_choice="auto"
+        )
+        print("got response")
+        message = response.choices[0].message
+        messages.append(message)
 
-    if message.function_call:
-        function_name = message.function_call.name
-        arguments = message.function_call.arguments
+        if not message.tool_calls:
+            break
 
-        if function_name == "staged_diff":
-            result = staged_diff()
-        elif function_name == "write_commit_message":
-            result = write_commit_message(arguments.get("diff", ""))
-        elif function_name == "commit_with_message":
-            result = commit_with_message(arguments.get("message", ""))
-        elif function_name == "push_changes":
-            result = push_changes()
-        else:
-            raise ValueError(f"Unknown function: {function_name}")
+        for tool_call in message.tool_calls:
+            function_name = tool_call.function.name
+            arguments = json.loads(tool_call.function.arguments or "{}")
 
-        messages.append({"role": "function", "name": function_name, "content": result})
-    else:
-        break
+            if function_name == "staged_diff":
+                result = staged_diff()
+            elif function_name == "write_commit_message":
+                result = write_commit_message(arguments.get("diff", ""))
+            elif function_name == "commit_with_message":
+                result = commit_with_message(arguments.get("message", ""))
+            elif function_name == "push_changes":
+                result = push_changes()
+            else:
+                raise ValueError(f"Unknown function: {function_name}")
+
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": result,
+                }
+            )
+
 
 if __name__ == "__main__":
     try:
-        diff = staged_diff()
-        if not diff:
-            print("No staged changes to commit.")
-            exit(0)
-        commit_message = write_commit_message(diff)
-        print(f"Generated commit message: {commit_message}")
-        commit_output = commit_with_message(commit_message)
-        print(commit_output)
-        push_output = push_changes()
-        print(push_output)
+        run_agent()
     except Exception as e:
         print(f"Error: {e}")
