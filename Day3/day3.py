@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from openai import OpenAI
+from pathlib import Path
 import chromadb
 
 
@@ -13,6 +14,7 @@ app = FastAPI()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))  # Replace with your actual OpenAI API key or ensure it's set in your environment variables.
 chroma = chromadb.PersistentClient(path="./chroma_db")  # Ensure the path is correct and accessible.
 collection = chroma.get_or_create_collection("regulations")  # Ensure the collection name is correct.
+BASE_DIR = Path(__file__).parent
 
 SYSTEM_PROMPT = """You are a helpful assistant that provides information about regulations.
                 You will be given a question and some context. Use the context to answer the question accurately. 
@@ -76,7 +78,7 @@ def index_regulations():
     """
     import os
     print("WORKING DIR:", os.getcwd())
-    with open("regulation.txt", "r") as f:
+    with open(BASE_DIR / "regulation.txt", "r") as f:
         text = f.read()
     
     chunks = chunk(text)
@@ -89,6 +91,7 @@ def query_regulations(query: Query):
     Endpoint to query regulations based on the provided question.
     """
     queryContext, metadata = retrieve(query.query)
+    print("Metadata", metadata)
     print("RETRIEVED:", queryContext) 
     print("Collections:", collection.count())
     response = client.chat.completions.parse(
