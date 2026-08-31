@@ -10,6 +10,47 @@ from openai import OpenAI
 
 client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
+SYSTEM_PROMPT = """You are a helpful assistant that reviews staged changes in a git repository and commits them with a well-written commit message.
+You will be given a staged diff and you should generate a concise and descriptive commit message in the conventional commit format: type(scope): summary. Use imperative mood and be clear and concise.
+If the diff is empty or there are no staged changes, respond with "No staged changes to commit."
+Do not make up information. Be concise and clear in your response.
+
+You always work in a loop to finish the task pipeline as below.
+
+Rules:
+1. You will always follow the steps in the order provided below.
+2. You will always return the json response strictly.
+
+
+Steps: Initialise | Think | Call Tool | Receive Tool Output |  Finish
+
+Tools: staged_diff | write_commit_message | commit_with_message | push_changes
+
+"staged_diff": Get the staged diff of the current git repository.
+"write_commit_message": Generate a commit message based on the staged diff using OpenAI's API.
+"commit_with_message": Commit the staged changes with the provided commit message.
+"push_changes": Push the committed changes to the remote repository.
+
+EXAMPLE
+
+User: Commit my staged changes.
+
+{"step": "Think", "content": "I need to see what's staged before I can describe it. I'll call staged_diff first."}
+{"step": "Call Tool", "tool": "staged_diff", "input": ""}
+{"step": "Receive Tool Output", "tool": "staged_diff", "output": "diff --git a/app.py b/app.py\n+ added retry logic to the API client"}
+{"step": "Think", "content": "The diff adds retry logic to the API client. I'll generate a conventional commit message for that."}
+{"step": "Call Tool", "tool": "write_commit_message", "input": "diff --git a/app.py ... added retry logic"}
+{"step": "Receive Tool Output", "tool": "write_commit_message", "output": "feat(api): add retry logic to API client"}
+{"step": "Think", "content": "I have a message. Now I'll commit the staged changes with it."}
+{"step": "Call Tool", "tool": "commit_with_message", "input": "feat(api): add retry logic to API client"}
+{"step": "Receive Tool Output", "tool": "commit_with_message", "output": "committed as a1b2c3d"}
+{"step": "Think", "content": "Commit succeeded. Finally I'll push to the remote."}
+{"step": "Call Tool", "tool": "push_changes", "input": ""}
+{"step": "Receive Tool Output", "tool": "push_changes", "output": "pushed to origin/main"}
+{"step": "Finish", "content": "Staged changes committed as a1b2c3d and pushed to origin/main."}
+
+"""
+
 tools = [
     {
         "type": "function",
@@ -125,44 +166,32 @@ def push_changes():
     return result.stdout
 
 
+
+def call_Model(messages, tools, tool_choice="auto"):
+    response = client.chat.completions.create(
+        model="gpt-4o-mini", messages=messages, tools=tools, tool_choice=tool_choice
+    )
+    return response.choices[0].message
+
 def run_agent():
     messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": "Review my staged changes and commit them well."}
     ]
-    while True:
-        print("calling API...")
-        response = client.chat.completions.create(
-            model="gpt-4o-mini", messages=messages, tools=tools, tool_choice="auto"
-        )
-        print("got response")
-        message = response.choices[0].message
+    step = "Think"  # Initialize the first step
+    while step != "Finish":
+        if step == "Think":
+            print("Thinking:", messages[-1].content)
+        elif step == "Call Tool":
+            print(f"Calling tool: {messages[-1].tool} with input: {messages[-1].input}")
+        elif step == "Receive Tool Output":
+            print(f"Received output from tool: {messages[-1].tool}: {messages[-1].output}")
+        else:
+            raise ValueError(f"Unknown step: {step}")
+
+        message = call_Model(messages, tools=tools)
         messages.append(message)
-
-        if not message.tool_calls:
-            break
-
-        for tool_call in message.tool_calls:
-            function_name = tool_call.function.name
-            arguments = json.loads(tool_call.function.arguments or "{}")
-
-            if function_name == "staged_diff":
-                result = staged_diff()
-            elif function_name == "write_commit_message":
-                result = write_commit_message(arguments.get("diff", ""))
-            elif function_name == "commit_with_message":
-                result = commit_with_message(arguments.get("message", ""))
-            elif function_name == "push_changes":
-                result = push_changes()
-            else:
-                raise ValueError(f"Unknown function: {function_name}")
-
-            messages.append(
-                {
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "content": result,
-                }
-            )
+        step = message.step
 
 
 if __name__ == "__main__":
