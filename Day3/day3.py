@@ -11,12 +11,21 @@ from pathlib import Path
 
 import chromadb
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from openai import OpenAI
 from pydantic import BaseModel
 import re
 import csv
 
+
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5174"],  # Adjust this to your needs
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 client = OpenAI(
     api_key=os.getenv("OPENAI_API_KEY")
 )  # Replace with your actual OpenAI API key or ensure it's set in your environment variables.
