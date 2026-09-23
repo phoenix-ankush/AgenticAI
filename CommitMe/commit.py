@@ -45,6 +45,7 @@ def write_commit_message(diff: str) -> str:
     return content.strip()
 
 
+
 def commit_with_message(message):
     """Commit the staged changes with the provided commit message."""
     result = subprocess.run(
